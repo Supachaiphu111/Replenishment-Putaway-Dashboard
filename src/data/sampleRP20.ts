@@ -33,34 +33,43 @@ function formatDate(d: Date): string {
 
 export function generatePreloadedRP20Data(): RP20RawRecord[] {
   const records: RP20RawRecord[] = [];
-  const baseDate = new Date(2026, 9, 26); // 2026-10-26
 
-  const dates = [
-    formatDate(baseDate),
-    formatDate(new Date(2026, 9, 25)),
-    formatDate(new Date(2026, 9, 24)),
+  // Multi-Month & Multi-Day Date Schedule (May 2026 to October 2026)
+  const multiMonthDates = [
+    // May 2026
+    '2026-05-08', '2026-05-15', '2026-05-22', '2026-05-29',
+    // June 2026
+    '2026-06-05', '2026-06-12', '2026-06-19', '2026-06-26',
+    // July 2026
+    '2026-07-03', '2026-07-10', '2026-07-17', '2026-07-24', '2026-07-31',
+    // August 2026
+    '2026-08-07', '2026-08-14', '2026-08-21', '2026-08-28',
+    // September 2026
+    '2026-09-04', '2026-09-11', '2026-09-18', '2026-09-25', '2026-09-30',
+    // October 2026 (Recent daily trend)
+    '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26'
   ];
 
   let idCounter = 1;
 
-  for (const dateStr of dates) {
-    // Generate realistic shifts for each day
-    // Day Shift: 08:00 to 17:00
-    // Night Shift: 20:00 to 04:00
-    const dayMultiplier = dateStr === dates[0] ? 1.0 : 0.9;
+  for (const dateStr of multiMonthDates) {
+    const isRecentDaily = dateStr.startsWith('2026-10-2');
+    // Recent days have full 24H operational depth; historical days have representative sampling
+    const hoursToGenerate = isRecentDaily
+      ? Array.from({ length: 24 }, (_, i) => i)
+      : [6, 8, 9, 10, 11, 13, 14, 15, 16, 19, 21, 22, 1, 3];
 
-    for (let hour = 0; hour < 24; hour++) {
-      // Determine activity weight based on warehouse operational patterns
-      let hourWeight = 0;
-      if (hour >= 8 && hour <= 11) hourWeight = 8; // Morning peak
-      else if (hour === 12) hourWeight = 2; // Lunch break
-      else if (hour >= 13 && hour <= 17) hourWeight = 9; // Afternoon rush
-      else if (hour >= 18 && hour <= 19) hourWeight = 3; // Shift handover
-      else if (hour >= 20 && hour <= 23) hourWeight = 5; // Night shift wave 1
-      else if (hour >= 0 && hour <= 4) hourWeight = 3; // Night shift wave 2
-      else if (hour >= 5 && hour <= 7) hourWeight = 1; // Early prep
+    for (const hour of hoursToGenerate) {
+      let hourWeight = 2;
+      if (hour >= 8 && hour <= 11) hourWeight = 6;
+      else if (hour === 12) hourWeight = 1;
+      else if (hour >= 13 && hour <= 17) hourWeight = 7;
+      else if (hour >= 19 && hour <= 23) hourWeight = 4;
+      else if (hour >= 0 && hour <= 4) hourWeight = 3;
 
-      const taskCountThisHour = Math.round((hourWeight * 4.5 + (idCounter % 5)) * dayMultiplier);
+      const taskCountThisHour = isRecentDaily
+        ? Math.max(1, Math.round((hourWeight * 3.2 + (idCounter % 3))))
+        : Math.max(1, Math.round(hourWeight * 1.5 + (idCounter % 2)));
 
       for (let i = 0; i < taskCountThisHour; i++) {
         const userIndex = (i + hour * 3 + idCounter) % EMPLOYEES.length;

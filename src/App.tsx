@@ -15,6 +15,7 @@ import { KpiCards } from './components/KpiCards';
 import { HourlyChart } from './components/HourlyChart';
 import { HourlyCompleteTable } from './components/HourlyCompleteTable';
 import { CumulativeChart } from './components/CumulativeChart';
+import { CumulativeTrendChart } from './components/CumulativeTrendChart';
 import { TopEmployeesChart } from './components/TopEmployeesChart';
 import { MatrixTable } from './components/MatrixTable';
 import { TaskBreakdown } from './components/TaskBreakdown';
@@ -27,10 +28,10 @@ import { User } from 'firebase/auth';
 import { getSavedAppsScriptUrl, isAutoSyncEnabled, syncTaskToAppsScript } from './services/appsScriptSync';
 import { FileSpreadsheet, Sparkles, HelpCircle } from 'lucide-react';
 
-const STORAGE_KEY_DATA = 'rp20_records_realtime_v1';
-const STORAGE_KEY_FILE = 'rp20_filename_realtime_v1';
-const STORAGE_KEY_MAPPING = 'rp20_mapping_realtime_v1';
-const STORAGE_KEY_THEME = 'rp20_darkmode_realtime_v1';
+const STORAGE_KEY_DATA = 'rp20_records_realtime_v2';
+const STORAGE_KEY_FILE = 'rp20_filename_realtime_v2';
+const STORAGE_KEY_MAPPING = 'rp20_mapping_realtime_v2';
+const STORAGE_KEY_THEME = 'rp20_darkmode_realtime_v2';
 
 export default function App() {
   // Preload realistic RP20 dataset initially or restore from realtime local storage
@@ -612,6 +613,14 @@ export default function App() {
         <CumulativeChart
           data={hourlyProductivity}
           totalComplete={dailyTotalComplete}
+          isDarkMode={isDarkMode}
+        />
+
+        {/* Chart 3: Cumulative Multi-Day & Multi-Month Task Trend with Per-Task Line Curves & Percentages */}
+        <CumulativeTrendChart
+          records={records}
+          selectedDate={filters.date}
+          onSelectDate={(d) => setFilters(prev => ({ ...prev, date: d, selectedHour: null }))}
           isDarkMode={isDarkMode}
         />
 
