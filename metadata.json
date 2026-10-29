@@ -1,0 +1,8 @@
+{
+  "name": "Replenishment & Putaway Dashboard",
+  "description": "ระบบรายงานและวิเคราะห์ยอดงานรายชั่วโมงจากไฟล์ RP20 (Excel) กรองสถานะ Complete แยกตาม By User พร้อมกราฟสะสมและตาราง Matrix",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
