@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { RP20RawRecord } from '../types/rp20';
 import { isStatusComplete } from '../utils/excelParser';
+import { isHourInShift, ShiftType } from '../utils/shiftHelper';
 import {
   TrendingUp,
   Calendar,
@@ -13,14 +14,26 @@ import {
   ArrowUpRight,
   Filter,
   CheckCircle2,
-  Maximize2
+  Maximize2,
+  ExternalLink,
+  Table,
+  Hash,
+  Download,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
-interface CumulativeTrendChartProps {
+export interface CumulativeTrendChartProps {
   records: RP20RawRecord[];
   selectedDate?: string;
   onSelectDate?: (date: string) => void;
   isDarkMode?: boolean;
+  onOpenStandalonePage?: () => void;
+  onOpenPopoutModal?: () => void;
+  isStandalonePage?: boolean;
 }
 
 type TimeframeMode = 'daily' | 'monthly';
@@ -139,17 +152,28 @@ export const CumulativeTrendChart: React.FC<CumulativeTrendChartProps> = ({
   selectedDate,
   onSelectDate,
   isDarkMode = true,
+  onOpenStandalonePage,
+  onOpenPopoutModal,
+  isStandalonePage = false,
 }) => {
   // Navigation & filter state
   const [timeframe, setTimeframe] = useState<TimeframeMode>('daily');
   const [metricMode, setMetricMode] = useState<MetricMode>('cumulative');
   const [dailyRange, setDailyRange] = useState<DailyRange>('all');
   const [monthlyRange, setMonthlyRange] = useState<MonthlyRange>('all');
+  const [shiftFilter, setShiftFilter] = useState<ShiftType>('all');
+  const [showDataNumbers, setShowDataNumbers] = useState<boolean>(true);
+  const [showDataTable, setShowDataTable] = useState<boolean>(isStandalonePage);
+  const [searchTableQuery, setSearchTableQuery] = useState<string>('');
 
-  // Filter only Complete tasks for production accuracy
+  // Filter only Complete tasks & shift for production accuracy
   const completeRecords = useMemo(() => {
-    return records.filter(r => isStatusComplete(r.taskStatus));
-  }, [records]);
+    return records.filter(r => {
+      if (!isStatusComplete(r.taskStatus)) return false;
+      if (shiftFilter !== 'all' && !isHourInShift(r.completedHour, shiftFilter)) return false;
+      return true;
+    });
+  }, [records, shiftFilter]);
 
   // Extract distinct task descriptions in the dataset
   const allTaskDescriptions = useMemo(() => {
@@ -386,6 +410,37 @@ interface CumulativeTrendChartData {
   // Active hover point details
   const activeHoverPoint = hoveredIndex !== null && dataList[hoveredIndex] ? dataList[hoveredIndex] : null;
 
+  // Export full table data to CSV
+  const handleExportTableCSV = () => {
+    const headers = ['งวดเวลา', 'ยอดรวมงวด', 'ยอดรวมสะสม'];
+    allTaskDescriptions.forEach(task => {
+      headers.push(`"${task} (จำนวน)"`);
+      headers.push(`"${task} (%)"`);
+      headers.push(`"${task} (สะสม)"`);
+    });
+
+    const rows = chartData.periodDataList.map(p => {
+      const row: (string | number)[] = [`"${p.label}"`, p.periodTotal, p.cumulativeTotal];
+      allTaskDescriptions.forEach(task => {
+        const vol = p.volume[task] || 0;
+        const pct = p.periodTotal > 0 ? ((vol / p.periodTotal) * 100).toFixed(1) + '%' : '0.0%';
+        const cum = p.cumulative[task] || 0;
+        row.push(vol, `"${pct}"`, cum);
+      });
+      return row.join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `RP20_Cumulative_Task_Breakdown_${timeframe}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div
       className={`rounded-2xl p-5 mb-6 border transition-all ${
@@ -426,11 +481,11 @@ interface CumulativeTrendChartData {
             </span>
           </div>
           <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-            วิเคราะห์แนวโน้มการเติบโตของงานสะสมในแต่ละวันและหลายเดือน พร้อมเส้นกราฟและสัดส่วนเปอร์เซ็นต์ (%) ของแต่ละงาน
+            วิเคราะห์แนวโน้มการเติบโตของงานสะสมในแต่ละวันและหลายเดือน พร้อมเส้นกราฟ สัดส่วนเปอร์เซ็นต์ (%) และตัวเลขกำกับ
           </p>
         </div>
 
-        {/* Action Pills: Daily vs Multi-Month Toggle & Metric Mode */}
+        {/* Action Pills & Mode Switchers */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Timeframe Switcher (รายวัน / หลายเดือน) */}
           <div
@@ -450,7 +505,7 @@ interface CumulativeTrendChartData {
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
-              <span>📅 รายวัน (Daily)</span>
+              <span>📅 รายวัน</span>
             </button>
             <button
               type="button"
@@ -464,7 +519,7 @@ interface CumulativeTrendChartData {
               }`}
             >
               <CalendarRange className="w-3.5 h-3.5" />
-              <span>📆 หลายเดือน (Multi-Month)</span>
+              <span>📆 หลายเดือน</span>
             </button>
           </div>
 
@@ -503,6 +558,72 @@ interface CumulativeTrendChartData {
               📊 ยอดในแต่ละงวด
             </button>
           </div>
+
+          {/* Toggle Display Numbers on Points */}
+          <button
+            type="button"
+            onClick={() => setShowDataNumbers(prev => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+              showDataNumbers
+                ? isDarkMode
+                  ? 'bg-cyan-500/15 text-cyan-300 border-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+                  : 'bg-cyan-50 text-cyan-900 border-cyan-300'
+                : isDarkMode
+                ? 'bg-slate-950/60 text-slate-400 border-white/10 hover:text-white'
+                : 'bg-white text-slate-600 border-slate-200'
+            }`}
+            title="แสดงหรือซ่อนตัวเลขจำนวนงานกำกับบนจุดยอดของเส้นกราฟ"
+          >
+            <Hash className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{showDataNumbers ? 'ตัวเลขบนกราฟ: เปิด' : 'ตัวเลขบนกราฟ: ปิด'}</span>
+          </button>
+
+          {/* Toggle Interactive Data Table */}
+          <button
+            type="button"
+            onClick={() => setShowDataTable(prev => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+              showDataTable
+                ? isDarkMode
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/40 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                  : 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                : isDarkMode
+                ? 'bg-slate-950/60 text-slate-400 border-white/10 hover:text-white'
+                : 'bg-white text-slate-600 border-slate-200'
+            }`}
+            title="แสดงหรือซ่อนตารางข้อมูลตัวเลขและเปอร์เซ็นต์ละเอียด"
+          >
+            <Table className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{showDataTable ? 'ซ่อนตารางตัวเลข & %' : 'ตารางตัวเลข & %'}</span>
+          </button>
+
+          {/* Separate Page & Modal Buttons */}
+          {onOpenStandalonePage && !isStandalonePage && (
+            <button
+              type="button"
+              onClick={onOpenStandalonePage}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-500/20 to-purple-500/20 hover:from-indigo-500/30 hover:to-purple-500/30 text-indigo-300 border border-indigo-400/40 shadow-[0_0_14px_rgba(99,102,241,0.2)] cursor-pointer transition-all"
+              title="เปิดหน้าต่างแยกเต็มหน้าสำหรับวิเคราะห์งานสะสมโดยเฉพาะ"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-indigo-300" />
+              <span>เปิดหน้าต่างแยก</span>
+            </button>
+          )}
+
+          {onOpenPopoutModal && (
+            <button
+              type="button"
+              onClick={onOpenPopoutModal}
+              className={`p-1.5 rounded-xl border transition-all cursor-pointer ${
+                isDarkMode
+                  ? 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white border-white/10'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+              title="เปิดดูในหน้าต่าง Pop-up แยก"
+            >
+              <Maximize2 className="w-4 h-4 text-cyan-400" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -774,19 +895,49 @@ interface CumulativeTrendChartData {
                     const isHovered = hoveredIndex === pIdx;
 
                     return (
-                      <circle
-                        key={`dot-${task}-${pIdx}`}
-                        cx={x}
-                        cy={y}
-                        r={isHovered ? 5.5 : 3}
-                        fill={theme.stroke}
-                        stroke={isDarkMode ? '#0f172a' : '#ffffff'}
-                        strokeWidth="1.5"
-                        className="transition-all duration-150 cursor-pointer"
-                        style={{
-                          filter: isHovered ? 'drop-shadow(0 0 6px rgba(255,255,255,0.8))' : undefined,
-                        }}
-                      />
+                      <g key={`dot-group-${task}-${pIdx}`}>
+                        <circle
+                          key={`dot-${task}-${pIdx}`}
+                          cx={x}
+                          cy={y}
+                          r={isHovered ? 5.5 : 3}
+                          fill={theme.stroke}
+                          stroke={isDarkMode ? '#0f172a' : '#ffffff'}
+                          strokeWidth="1.5"
+                          className="transition-all duration-150 cursor-pointer"
+                          style={{
+                            filter: isHovered ? 'drop-shadow(0 0 6px rgba(255,255,255,0.8))' : undefined,
+                          }}
+                        />
+
+                        {/* Direct Numeric Values on Points (แสดงตัวเลขกำกับจุดกราฟ) */}
+                        {(showDataNumbers || isHovered) && val > 0 && (
+                          <g className="pointer-events-none select-none">
+                            <rect
+                              x={x - 14}
+                              y={y - 19}
+                              width={28}
+                              height={13}
+                              rx={3.5}
+                              fill={isDarkMode ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.95)'}
+                              stroke={theme.stroke}
+                              strokeWidth="0.8"
+                              className="shadow-sm"
+                            />
+                            <text
+                              x={x}
+                              y={y - 9}
+                              textAnchor="middle"
+                              fill={theme.stroke}
+                              fontSize="8.5"
+                              fontWeight="bold"
+                              fontFamily="monospace"
+                            >
+                              {val.toLocaleString()}
+                            </text>
+                          </g>
+                        )}
+                      </g>
                     );
                   })}
                 </g>
@@ -1091,6 +1242,263 @@ interface CumulativeTrendChartData {
           })}
         </div>
       </div>
+
+      {/* =========================================================================
+          DETAILED NUMERICAL DATA & PERCENTAGE TABLE (แสดงตัวเลขและเปอร์เซ็นต์ละเอียด)
+          ========================================================================= */}
+      {showDataTable && (
+        <div
+          className={`mt-6 pt-5 border-t rounded-xl transition-all ${
+            isDarkMode ? 'border-white/10' : 'border-slate-200'
+          }`}
+        >
+          {/* Table Header & Controls */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-400">
+                <Table className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>ตารางสรุปตัวเลขและเปอร์เซ็นต์ของแต่ละงาน</span>
+                  <span className="text-[10px] font-mono-numbers px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10">
+                    {timeframe === 'daily' ? 'รายวัน' : 'รายเดือน'}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  แสดงตัวเลขจำนวนงาน สัดส่วนเปอร์เซ็นต์ (%) และยอดสะสมต่อเนื่องแยกตามประเภทงาน
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              {/* Shift Filter Pills */}
+              <div
+                className={`flex items-center gap-1 p-0.5 rounded-xl border text-[11px] font-medium backdrop-blur-md ${
+                  isDarkMode ? 'bg-slate-950/60 border-white/10' : 'bg-white/80 border-slate-200'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShiftFilter('all')}
+                  className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                    shiftFilter === 'all'
+                      ? 'bg-slate-800 text-white font-bold border border-white/15'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  ทั้งหมด 24 ชม.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShiftFilter('morning')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                    shiftFilter === 'morning'
+                      ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-400/40'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="เฉพาะกะเช้า 05:00 - 17:00 น."
+                >
+                  <Sun className="w-3 h-3 text-amber-400" />
+                  <span>กะเช้า</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShiftFilter('night')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                    shiftFilter === 'night'
+                      ? 'bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-400/40'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="เฉพาะกะดึก 18:00 - 04:00 น."
+                >
+                  <Moon className="w-3 h-3 text-indigo-400" />
+                  <span>กะดึก</span>
+                </button>
+              </div>
+
+              {/* Search Filter */}
+              <div className="relative flex-1 sm:w-44">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="ค้นหาวันที่/เดือน..."
+                  value={searchTableQuery}
+                  onChange={(e) => setSearchTableQuery(e.target.value)}
+                  className={`w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border focus:outline-none transition-all ${
+                    isDarkMode
+                      ? 'bg-slate-900/60 border-white/10 text-white placeholder-slate-500 focus:border-cyan-400/50'
+                      : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-cyan-500'
+                  }`}
+                />
+              </div>
+
+              {/* Export CSV Button */}
+              <button
+                type="button"
+                onClick={handleExportTableCSV}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 transition-all cursor-pointer shadow-xs shrink-0"
+                title="ดาวน์โหลดตารางข้อมูลตัวเลขและเปอร์เซ็นต์นี้เป็นไฟล์ CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>ส่งออก CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table Container */}
+          <div className="overflow-x-auto rounded-xl border border-white/10 shadow-inner max-h-[440px] overflow-y-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead className={`sticky top-0 z-20 backdrop-blur-md ${isDarkMode ? 'bg-slate-950/95 text-slate-300' : 'bg-slate-100/95 text-slate-700'}`}>
+                <tr className="border-b border-white/10">
+                  <th className="py-2.5 px-3 font-semibold uppercase tracking-wider sticky left-0 z-20 bg-inherit min-w-[110px]">
+                    งวดเวลา
+                  </th>
+                  <th className="py-2.5 px-3 font-semibold text-right font-mono-numbers min-w-[90px]">
+                    ยอดรวมงวด
+                  </th>
+                  <th className="py-2.5 px-3 font-semibold text-right font-mono-numbers min-w-[95px] text-emerald-400">
+                    ยอดสะสมรวม
+                  </th>
+                  {allTaskDescriptions.map((taskName, idx) => {
+                    const theme = getTaskTheme(taskName, idx);
+                    const isVisible = visibleTasks.has(taskName);
+                    return (
+                      <th
+                        key={`th-${taskName}`}
+                        className={`py-2.5 px-3 font-semibold text-right min-w-[130px] border-l border-white/5 ${
+                          isVisible ? '' : 'opacity-40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: theme.stroke }} />
+                          <span className="truncate max-w-[120px]" title={taskName}>{taskName}</span>
+                        </div>
+                        <div className="text-[10px] font-normal text-slate-400 mt-0.5">
+                          จำนวน | % | สะสม
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDarkMode ? 'divide-white/5' : 'divide-slate-200'}`}>
+                {chartData.periodDataList
+                  .filter(p => !searchTableQuery || p.label.toLowerCase().includes(searchTableQuery.toLowerCase()) || p.period.includes(searchTableQuery))
+                  .map((p) => {
+                    const isSelected = selectedDate && p.period === selectedDate;
+                    return (
+                      <tr
+                        key={`row-${p.period}`}
+                        onClick={() => {
+                          if (timeframe === 'daily' && onSelectDate) {
+                            onSelectDate(p.period);
+                          }
+                        }}
+                        className={`transition-colors cursor-pointer group ${
+                          isSelected
+                            ? isDarkMode
+                              ? 'bg-emerald-500/10'
+                              : 'bg-emerald-50'
+                            : isDarkMode
+                            ? 'hover:bg-white/5'
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <td className="py-2 px-3 font-medium sticky left-0 z-10 bg-inherit whitespace-nowrap">
+                          <span className="flex items-center gap-1.5">
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />}
+                            <span className={isSelected ? 'text-emerald-400 font-bold' : isDarkMode ? 'text-slate-200' : 'text-slate-800'}>
+                              {p.label}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono-numbers font-semibold text-white">
+                          {p.periodTotal.toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono-numbers font-bold text-emerald-400">
+                          {p.cumulativeTotal.toLocaleString()}
+                        </td>
+                        {allTaskDescriptions.map((taskName, idx) => {
+                          const vol = p.volume[taskName] || 0;
+                          const pct = p.periodTotal > 0 ? ((vol / p.periodTotal) * 100).toFixed(1) : '0';
+                          const cum = p.cumulative[taskName] || 0;
+                          const theme = getTaskTheme(taskName, idx);
+                          const isVisible = visibleTasks.has(taskName);
+
+                          return (
+                            <td
+                              key={`cell-${p.period}-${taskName}`}
+                              className={`py-2 px-3 text-right font-mono-numbers border-l border-white/5 whitespace-nowrap ${
+                                isVisible ? '' : 'opacity-40'
+                              }`}
+                            >
+                              <div className="flex items-baseline justify-end gap-1.5">
+                                <span className={`font-semibold ${vol > 0 ? 'text-white' : 'text-slate-500'}`}>
+                                  {vol.toLocaleString()}
+                                </span>
+                                <span
+                                  className="text-[10px] px-1 py-0.2 rounded font-bold"
+                                  style={{
+                                    color: theme.stroke,
+                                    backgroundColor: theme.fill,
+                                  }}
+                                >
+                                  {pct}%
+                                </span>
+                                <span className="text-[11px] text-slate-400">
+                                  ({cum.toLocaleString()})
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+              </tbody>
+              {/* Summary Row */}
+              <tfoot className={`sticky bottom-0 z-20 backdrop-blur-md border-t-2 font-semibold ${
+                isDarkMode ? 'bg-slate-950/95 border-emerald-500/40 text-white' : 'bg-slate-100/95 border-emerald-500/40 text-slate-900'
+              }`}>
+                <tr>
+                  <td className="py-2.5 px-3 sticky left-0 z-20 bg-inherit font-bold">
+                    ยอดรวมสะสมสุทธิ
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono-numbers font-bold text-white">
+                    {chartData.grandTotal.toLocaleString()}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono-numbers font-bold text-emerald-400">
+                    -
+                  </td>
+                  {allTaskDescriptions.map((taskName, idx) => {
+                    const count = chartData.taskTotals[taskName] || 0;
+                    const pct = chartData.grandTotal > 0 ? ((count / chartData.grandTotal) * 100).toFixed(1) : '0';
+                    const theme = getTaskTheme(taskName, idx);
+
+                    return (
+                      <td key={`sum-${taskName}`} className="py-2.5 px-3 text-right font-mono-numbers border-l border-white/5 whitespace-nowrap">
+                        <div className="flex items-baseline justify-end gap-1.5">
+                          <span className="font-bold text-white">{count.toLocaleString()}</span>
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                            style={{
+                              color: theme.stroke,
+                              backgroundColor: theme.fill,
+                            }}
+                          >
+                            {pct}%
+                          </span>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
