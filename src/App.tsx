@@ -15,9 +15,6 @@ import { KpiCards } from './components/KpiCards';
 import { HourlyChart } from './components/HourlyChart';
 import { HourlyCompleteTable } from './components/HourlyCompleteTable';
 import { CumulativeChart } from './components/CumulativeChart';
-import { CumulativeTrendChart } from './components/CumulativeTrendChart';
-import { CumulativeAnalyticsView } from './components/CumulativeAnalyticsView';
-import { CumulativeAnalyticsModal } from './components/CumulativeAnalyticsModal';
 import { TopEmployeesChart } from './components/TopEmployeesChart';
 import { MatrixTable } from './components/MatrixTable';
 import { TaskBreakdown } from './components/TaskBreakdown';
@@ -28,7 +25,7 @@ import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { initAuth, googleSignIn } from './services/googleAuth';
 import { User } from 'firebase/auth';
 import { getSavedAppsScriptUrl, isAutoSyncEnabled, syncTaskToAppsScript } from './services/appsScriptSync';
-import { FileSpreadsheet, Sparkles, HelpCircle, TrendingUp, LayoutDashboard, Maximize2 } from 'lucide-react';
+import { FileSpreadsheet, Sparkles, HelpCircle } from 'lucide-react';
 
 const STORAGE_KEY_DATA = 'rp20_records_realtime_v2';
 const STORAGE_KEY_FILE = 'rp20_filename_realtime_v2';
@@ -85,8 +82,6 @@ export default function App() {
 
   const [sheetNames, setSheetNames] = useState<string[]>(['RP20_Tasks_Report']);
   const [activeSheet, setActiveSheet] = useState<string>('RP20_Tasks_Report');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'cumulative_analytics'>('dashboard');
-  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
   const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
   const [isLiveEntryOpen, setIsLiveEntryOpen] = useState(false);
   const [isGoogleSheetsOpen, setIsGoogleSheetsOpen] = useState(false);
@@ -542,90 +537,12 @@ export default function App() {
         isSaving={isSaving}
       />
 
-      {/* View Switcher: แดชบอร์ดกะ & รายชั่วโมง vs หน้าต่างวิเคราะห์งานสะสมรายวัน/หลายเดือน */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-1 relative z-10">
-        <div
-          className={`p-1.5 rounded-2xl border flex items-center justify-between gap-3 flex-wrap ${
-            isDarkMode
-              ? 'liquid-glass-dark liquid-rim-glow border-white/10 shadow-xl'
-              : 'liquid-glass-light liquid-rim-glow border-slate-200 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-[0_0_15px_rgba(16,185,129,0.35)]'
-                  : isDarkMode
-                  ? 'text-slate-400 hover:text-white hover:bg-white/5'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>📊 แดชบอร์ดกะ &amp; ผลงานรายชั่วโมง (24 ชม.)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('cumulative_analytics')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer relative ${
-                activeTab === 'cumulative_analytics'
-                  ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 text-white shadow-[0_0_18px_rgba(99,102,241,0.45)]'
-                  : isDarkMode
-                  ? 'text-slate-400 hover:text-white hover:bg-white/5'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4 text-cyan-300" />
-              <span>📈 หน้าต่างวิเคราะห์งานสะสม (รายวัน &amp; หลายเดือน)</span>
-              <span className="text-[10px] font-mono-numbers px-2 py-0.5 rounded-full bg-cyan-400/20 text-cyan-300 border border-cyan-400/30 font-semibold">
-                หน้าต่างแยก
-              </span>
-            </button>
-          </div>
-
-          {/* Quick Pop-up Separate Window Button */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsAnalyticsModalOpen(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
-                isDarkMode
-                  ? 'liquid-btn-dark text-cyan-300 hover:text-cyan-200'
-                  : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200 shadow-xs'
-              }`}
-              title="เปิดวิเคราะห์งานสะสมในหน้าต่าง Pop-up แยกอิสระ"
-            >
-              <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
-              <span>เปิดหน้าต่าง Pop-up แยก</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 relative z-0">
-        {activeTab === 'cumulative_analytics' ? (
-          /* Dedicated Separate Page: Cumulative Daily & Multi-Month Analytics */
-          <CumulativeAnalyticsView
-            records={records}
-            selectedDate={filters.date}
-            onSelectDate={(d) => {
-              setFilters(prev => ({ ...prev, date: d, selectedHour: null }));
-              setActiveTab('dashboard'); // Switch back to hourly dashboard to inspect day
-            }}
-            onBackToDashboard={() => setActiveTab('dashboard')}
-            onOpenPopoutModal={() => setIsAnalyticsModalOpen(true)}
-            isDarkMode={isDarkMode}
-          />
-        ) : (
-          /* Main Operations Dashboard */
-          <>
-            {/* Upload & Integration Area */}
-            <div id="upload-area">
-              <UploadSection
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-0">
+        
+        {/* Upload & Integration Area */}
+        <div id="upload-area">
+          <UploadSection
                 onFileUpload={handleFileUpload}
                 isLoading={isLoading}
                 error={error}
@@ -698,16 +615,6 @@ export default function App() {
               isDarkMode={isDarkMode}
             />
 
-            {/* Chart 3: Cumulative Multi-Day & Multi-Month Task Trend with Per-Task Line Curves & Percentages */}
-            <CumulativeTrendChart
-              records={records}
-              selectedDate={filters.date}
-              onSelectDate={(d) => setFilters(prev => ({ ...prev, date: d, selectedHour: null }))}
-              isDarkMode={isDarkMode}
-              onOpenStandalonePage={() => setActiveTab('cumulative_analytics')}
-              onOpenPopoutModal={() => setIsAnalyticsModalOpen(true)}
-            />
-
             {/* Matrix Table: พนักงาน x ชั่วโมง พร้อมปุ่ม Export CSV, Excel และ Google Sheets */}
             <MatrixTable
               userSummaries={userSummaries}
@@ -745,10 +652,9 @@ export default function App() {
               />
             </div>
 
-            {/* Raw Task Logs Table */}
-            <RawDataTable records={filteredRecords} isDarkMode={isDarkMode} />
-          </>
-        )}
+        {/* Raw Task Logs Table */}
+        <RawDataTable records={filteredRecords} isDarkMode={isDarkMode} />
+
       </main>
 
       {/* Google Sheets Integration Modal */}
@@ -781,16 +687,6 @@ export default function App() {
         onAddTask={handleLiveAddTask}
         availableUsers={availableUsers}
         availableDescriptions={availableDescriptions}
-        isDarkMode={isDarkMode}
-      />
-
-      {/* Dedicated Separate Pop-up Window for Cumulative Analytics */}
-      <CumulativeAnalyticsModal
-        isOpen={isAnalyticsModalOpen}
-        onClose={() => setIsAnalyticsModalOpen(false)}
-        records={records}
-        selectedDate={filters.date}
-        onSelectDate={(d) => setFilters(prev => ({ ...prev, date: d, selectedHour: null }))}
         isDarkMode={isDarkMode}
       />
     </div>
